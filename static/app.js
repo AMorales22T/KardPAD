@@ -1,15 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════════
-//  KardPad — app.js  v1.0
-//  Cliente WebSocket para mando de Mario Kart Wii en Dolphin.
-//  Inputs: botones digitales · inclinación (volante) · shake · puntero
+//  KardPad — app.js  v1.1
+//  Correcciones:
+//   • EMA suavizado corregido (alpha estaba invertido)
+//   • Haptic cuando el tilt cruza el threshold (feedback de dirección)
+//   • Haptic patrón diferente para izquierda vs derecha
+//   • Botones de estado visibles en portrait también (mini strip)
 // ═══════════════════════════════════════════════════════════════════════
 
 /* ─── Colores por jugador ─────────────────────────────────────────── */
 const PLAYER_COLORS = { 1: '#e74c3c', 2: '#3498db', 3: '#f1c40f', 4: '#2ecc71' };
 
-/* ─── Sensibilidad del volante (inclinación) ─────────────────────── */
-// deadzone: ignorar inclinaciones menores a este valor (0-1)
-// threshold: a partir de aquí se "activa" la dirección (visual)
+/* ─── Sensibilidad del volante ───────────────────────────────────── */
 const TILT_SENSE_MAP = {
   1: { deadzone: 0.12, threshold: 0.28 },
   2: { deadzone: 0.10, threshold: 0.26 },
@@ -17,41 +18,41 @@ const TILT_SENSE_MAP = {
   4: { deadzone: 0.04, threshold: 0.18 },
   5: { deadzone: 0.02, threshold: 0.14 },
 };
-const TILT_SMOOTH_ALPHA = 0.25;  // Suavizado EMA (0=sin suavizar, 1=máximo)
+
+// CORRECCIÓN: alpha representa cuánto peso tiene el valor NUEVO.
+// Valor más alto = respuesta más rápida pero menos suave.
+// 0.3 es un buen balance para un volante táctil.
+const TILT_SMOOTH_ALPHA = 0.3;
 
 /* ─── Detección de shake ──────────────────────────────────────────── */
-const SHAKE_THRESHOLD    = 18;   // m/s² — umbral de aceleración para shake
-const SHAKE_DEBOUNCE_MS  = 250;  // tiempo mínimo entre dos shakes (ms)
+const SHAKE_THRESHOLD   = 18;   // m/s²
+const SHAKE_DEBOUNCE_MS = 250;
 
 /* ─── Estado global ───────────────────────────────────────────────── */
 const state = {
-  // WebSocket
   socket:          null,
   selectedPlayer:  1,
   connectedPlayer: null,
   wsUrl:           null,
 
-  // Botones activos
   activeButtons: new Set(),
 
-  // Volante (inclinación)
   tiltEnabled:       false,
   tiltPermission:    false,
-  tiltNeutral:       null,   // valor de beta/gamma "al centro"
-  tiltSmoothed:      0,      // valor suavizado del roll
+  tiltNeutral:       null,
+  tiltSmoothed:      0,
   tiltSensLevel:     Number(lsGet('kardpad_tilt_sens') || '3'),
 
-  // Shake
+  // Para el haptic de tilt: evitar spam de vibraciones
+  tiltLastHapticSide: null,   // 'left' | 'right' | 'center'
+  tiltHapticTs:       0,
+
   lastShakeTs:        0,
   accelLast:          { x: 0, y: 0, z: 0 },
 
-  // Puntero
   pointerEnabled:    false,
-
-  // Ajustes
   vibrationEnabled:  lsGet('kardpad_vibration') !== 'false',
 
-  // QR scanner
   qrStream:    null,
   qrAnimFrame: null,
 };
@@ -76,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else setSetupMessage('Toca tu jugador para conectarte.');
   }
 });
+
 function isCapacitor() {
   return (
     window.Capacitor !== undefined ||
@@ -156,15 +158,11 @@ function injectIpScreen() {
     });
   };
 
-  // Botón QR abre el scanner directamente desde esta pantalla
   qrb.addEventListener('click', () => {
     scr.style.display = 'none';
     openQrScanner();
-    // Cuando el QR detecte la IP, ya llama a connectAs() solo
-    // Si cierran el scanner sin escanear, volvemos a mostrar esta pantalla
-    const origClose = closeQrScanner.bind({});
     window._qrCloseOverride = () => {
-      origClose();
+      closeQrScanner();
       if (!state.wsUrl || state.wsUrl.includes('localhost')) {
         scr.style.display = 'flex';
       }
@@ -243,7 +241,6 @@ function connectAs(player) {
       showController();
       setStatus(`P${msg.player} conectado 🏎️`);
     }
-    // Haptic del servidor (opcional)
     if (msg.type === 'haptic' && state.vibrationEnabled) {
       triggerHaptic(msg.duration_ms || 80);
     }
@@ -296,10 +293,8 @@ function bindController() {
   window.addEventListener('pagehide',     () => disconnect('pagehide'));
   window.addEventListener('blur', releaseAllButtons);
 
-  // Acelerómetro para inclinación y shake
   window.addEventListener('devicemotion', handleDeviceMotion);
 
-  // Recalibrar al girar la pantalla
   const onOrientationChange = () => {
     setTimeout(() => {
       if (state.tiltEnabled) {
@@ -326,7 +321,7 @@ function bindButtonPad() {
       btn.dataset.pressed = '1'; btn.classList.add('pressed');
       state.activeButtons.add(name);
       safeSend({ type: 'button', name, action: 'press' });
-      if (['ACCELERATE','BRAKE','DRIFT'].includes(name)) triggerHaptic(18);
+      if (['ACCELERATE','BRAKE','DRIFT','ITEM'].includes(name)) triggerHaptic(22);
     };
 
     const release = (e) => {
@@ -346,13 +341,13 @@ function bindButtonPad() {
   });
 }
 
-/* ─── Botón de shake manual (truco / objeto) ─────────────────────── */
+/* ─── Botón de shake manual ──────────────────────────────────────── */
 function bindShakeButton() {
   const btn = document.getElementById('shakeBtn');
   if (!btn) return;
   btn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    triggerHaptic(40);
+    triggerHaptic(55);
     safeSend({ type: 'shake', intensity: 1.0 });
     btn.classList.add('pressed');
   });
@@ -379,6 +374,7 @@ async function toggleTiltMode() {
   if (!ok) { setTiltCopy('Permiso denegado. Pulsa "Volante" de nuevo.'); return; }
   state.tiltEnabled  = true;
   state.tiltSmoothed = 0;
+  state.tiltLastHapticSide = null;
   calibrateTilt();
   setStatus(`P${state.connectedPlayer ?? state.selectedPlayer} — Volante activo 🏎️`);
   setTiltCopy('Inclina como un volante. Pulsa "Centrar" si se desvía.');
@@ -387,6 +383,7 @@ async function toggleTiltMode() {
 
 function disableTilt() {
   state.tiltEnabled = false; state.tiltNeutral = null; state.tiltSmoothed = 0;
+  state.tiltLastHapticSide = null;
   updateTiltIndicator(0);
   updateTiltUi();
   setTiltCopy('Activa el Volante para girar.');
@@ -408,7 +405,11 @@ function calibrateTilt() {
   if (!state.lastTiltRaw) { setTiltCopy('Sujeta el móvil horizontal y pulsa "Centrar".'); return; }
   state.tiltNeutral  = state.lastTiltRaw;
   state.tiltSmoothed = 0;
+  state.tiltLastHapticSide = null;
   updateTiltIndicator(0);
+  // Haptic de confirmación al calibrar
+  triggerHaptic(35);
+  setTimeout(() => triggerHaptic(35), 80);
   if (state.tiltEnabled) setTiltCopy('Centro guardado. Inclina para girar.');
 }
 
@@ -425,44 +426,42 @@ function handleDeviceMotion(ev) {
   if (!acc) return;
 
   // ── Inclinación (volante) ──────────────────────────────────────
-  // Guardamos el valor raw para poder calibrar
-  const angle  = getScreenAngle();
+  const angle = getScreenAngle();
   let rawRoll;
-  // En landscape (90°): el eje Y del acelerómetro es el roll
   if (angle === 90 || angle === -270) {
     rawRoll = clamp((acc.y ?? 0) / 9.8, -1, 1);
   } else if (angle === 270 || angle === -90) {
     rawRoll = clamp(-(acc.y ?? 0) / 9.8, -1, 1);
   } else {
-    // Portrait: eje X es el roll
     rawRoll = clamp((acc.x ?? 0) / 9.8, -1, 1);
   }
   state.lastTiltRaw = rawRoll;
 
   if (state.tiltEnabled) {
-    // Restar neutral si está calibrado
     const raw = state.tiltNeutral != null ? rawRoll - state.tiltNeutral : rawRoll;
 
-    // Suavizado EMA
-    const alpha = 1 - TILT_SMOOTH_ALPHA;
-    state.tiltSmoothed = alpha * raw + TILT_SMOOTH_ALPHA * state.tiltSmoothed;
+    // ── CORRECCIÓN EMA: alpha es el peso del valor NUEVO ──────────
+    // Antes estaba: alpha * raw + (1-alpha) * smoothed → invertido
+    // Correcto: smoothed = alpha * raw + (1-alpha) * smoothed
+    state.tiltSmoothed = TILT_SMOOTH_ALPHA * raw + (1 - TILT_SMOOTH_ALPHA) * state.tiltSmoothed;
 
-    // Deadzone
     const sens     = TILT_SENSE_MAP[state.tiltSensLevel] || TILT_SENSE_MAP[3];
     const smoothed = Math.abs(state.tiltSmoothed) > sens.deadzone ? state.tiltSmoothed : 0;
 
     safeSend({ type: 'tilt', axis: 'roll', value: smoothed, timestamp: Date.now() });
     updateTiltIndicator(smoothed);
+
+    // ── Haptic al cruzar el threshold ────────────────────────────
+    // Da feedback físico cuando el giro es suficientemente pronunciado
+    triggerTiltHaptic(smoothed, sens.threshold);
   }
 
   // ── Detección de shake ────────────────────────────────────────
   const ax = acc.x ?? 0, ay = acc.y ?? 0, az = acc.z ?? 0;
-  // Magnitud del "jerk" (cambio brusco de aceleración)
   const dx = ax - state.accelLast.x;
   const dy = ay - state.accelLast.y;
   const dz = az - state.accelLast.z;
   const jerk = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
   state.accelLast = { x: ax, y: ay, z: az };
 
   if (jerk > SHAKE_THRESHOLD) {
@@ -476,14 +475,41 @@ function handleDeviceMotion(ev) {
   }
 }
 
+/* ─── Haptic de dirección al inclinar ───────────────────────────── */
+function triggerTiltHaptic(value, threshold) {
+  const now = Date.now();
+  // Throttle: mínimo 300ms entre haptics de tilt
+  if (now - state.tiltHapticTs < 300) return;
+
+  let side;
+  if (value > threshold)  side = 'right';
+  else if (value < -threshold) side = 'left';
+  else side = 'center';
+
+  // Solo vibrar al ENTRAR en una zona nueva (no spam continuo)
+  if (side !== 'center' && side !== state.tiltLastHapticSide) {
+    state.tiltHapticTs      = now;
+    state.tiltLastHapticSide = side;
+    // Patrón diferente: derecha = pulso corto, izquierda = dos pulsos
+    if (side === 'right') {
+      triggerHaptic(25);
+    } else {
+      triggerHaptic(20);
+      setTimeout(() => triggerHaptic(20), 60);
+    }
+  } else if (side === 'center' && state.tiltLastHapticSide !== 'center') {
+    // Pequeño pulso al volver al centro
+    state.tiltLastHapticSide = 'center';
+    triggerHaptic(12);
+  }
+}
+
 /* ─── Barra visual de inclinación ────────────────────────────────── */
 function updateTiltIndicator(value) {
   const ind = document.getElementById('tiltIndicator'); if (!ind) return;
-  // value: -1 (izquierda) … 0 (centro) … +1 (derecha)
   const pct = clamp((value + 1) / 2 * 100, 0, 100);
   ind.style.left = `${pct}%`;
 
-  // Colorear según dirección
   const sens = TILT_SENSE_MAP[state.tiltSensLevel] || TILT_SENSE_MAP[3];
   if (value > sens.threshold)       ind.style.background = '#3498db';
   else if (value < -sens.threshold) ind.style.background = '#e74c3c';
@@ -494,11 +520,11 @@ function flashShakeButton() {
   const btn = document.getElementById('shakeBtn'); if (!btn) return;
   btn.classList.add('shake-flash');
   setTimeout(() => btn.classList.remove('shake-flash'), 180);
-  triggerHaptic(35);
+  triggerHaptic(40);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   MÓDULO: PUNTERO TÁCTIL (para menús de Dolphin)
+   MÓDULO: PUNTERO TÁCTIL
    ═══════════════════════════════════════════════════════════════════════ */
 
 function bindPointerPad() {
@@ -571,7 +597,6 @@ function initSettingsPanel() {
     });
   });
 
-  // Toggle vibración
   const vibToggle = document.getElementById('vibrationToggle');
   if (vibToggle) {
     vibToggle.setAttribute('aria-checked', state.vibrationEnabled ? 'true' : 'false');
@@ -583,7 +608,6 @@ function initSettingsPanel() {
     });
   }
 
-  // Toggle puntero
   const ptrToggle = document.getElementById('pointerToggle');
   if (ptrToggle) {
     ptrToggle.setAttribute('aria-checked', 'false');
@@ -594,7 +618,6 @@ function initSettingsPanel() {
     });
   }
 
-  // Slider sensibilidad volante
   const slider = document.getElementById('tiltSensSlider');
   if (slider) {
     slider.value = String(state.tiltSensLevel); updateTiltSensLabel();
@@ -618,7 +641,7 @@ function initSettingsPanel() {
   syncSettingsPlayerBtns(state.selectedPlayer);
 }
 
-function openSettings() { const o = document.getElementById('settingsOverlay'); if(o){o.classList.add('open');o.setAttribute('aria-hidden','false');} }
+function openSettings()  { const o = document.getElementById('settingsOverlay'); if(o){o.classList.add('open');o.setAttribute('aria-hidden','false');} }
 function closeSettings() { const o = document.getElementById('settingsOverlay'); if(o){o.classList.remove('open');o.setAttribute('aria-hidden','true');} }
 
 function syncSettingsPlayerBtns(player) {
@@ -726,7 +749,6 @@ function updateTiltUi() {
 }
 
 function setTiltCopy(t) { const el=document.getElementById('tiltCopy'); if(el) el.textContent=t; }
-
 function updateServerAddress() { const el=document.getElementById('serverAddress'); if(el) el.textContent=state.wsUrl||'--'; }
 
 function showController() {
@@ -750,6 +772,5 @@ async function toggleFullscreen() {
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-/* ─── localStorage ───────────────────────────────────────────────── */
 function lsGet(k)    { try { return localStorage.getItem(k); }    catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); }        catch {} }
