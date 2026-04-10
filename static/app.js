@@ -131,31 +131,62 @@ function injectIpScreen() {
   const attempt = () => {
     const raw = inp.value.trim();
     if (!raw) { err.textContent = 'Escribe la IP del PC.'; return; }
-    const ip = raw.replace(/^wss?:\/\//,'').replace(/^https?:\/\//,'').split(':')[0].split('/')[0];
-    if (!ip) { err.textContent = 'IP no válida.'; return; }
+
+    // Limpiar prefijos y extraer solo la IP/host
+    let ip = raw
+      .replace(/^wss?:\/\//i, '')
+      .replace(/^https?:\/\//i, '')
+      .split('/')[0]
+      .split(':')[0]
+      .trim();
+
+    // Validar IPv4 o hostname básico
+    const ipv4Re = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const hostRe = /^[a-zA-Z0-9][a-zA-Z0-9\-\.]{0,253}$/;
+    if (!ip || (!ipv4Re.test(ip) && !hostRe.test(ip))) {
+      err.textContent = 'IP no válida. Ej: 192.168.1.37';
+      return;
+    }
+
     lsSet('kardpad_ip', ip);
     const wsUrl = `ws://${ip}:8000`;
-    err.textContent = 'Probando conexión…';
+    // Guardar ANTES del probe — WebViews de Android a veces lanzan excepción síncrona
+    state.wsUrl = wsUrl;
+    err.textContent = 'Conectando…';
     btn.disabled = true; btn.style.opacity = '0.6';
+
+    const advance = () => {
+      btn.disabled = false; btn.style.opacity = '1';
+      scr.remove(); updateServerAddress();
+      connectAs(getInitialPlayer() || state.selectedPlayer || 1);
+    };
+
     let probe;
     try { probe = new WebSocket(wsUrl); }
-    catch { err.textContent = 'URL no válida.'; btn.disabled=false; btn.style.opacity='1'; return; }
+    catch (ex) {
+      // WebView bloqueó la creación síncrona (file:// o política interna)
+      console.warn('WS probe sync error, connecting directly:', ex);
+      advance(); return;
+    }
+
+    let done = false;
+    const finish = (ok) => {
+      if (done) return; done = true;
+      clearTimeout(timer);
+      btn.disabled = false; btn.style.opacity = '1';
+      if (ok) { scr.remove(); updateServerAddress(); connectAs(getInitialPlayer() || state.selectedPlayer || 1); }
+      else err.textContent = 'No se pudo conectar. ¿server.py corriendo? ¿Misma Wi-Fi?';
+    };
+
+    // Timeout generoso: algunos Android tardan en rechazar
     const timer = setTimeout(() => {
       try { probe.close(); } catch {}
-      err.textContent = '¿Está corriendo server.py?';
-      btn.disabled=false; btn.style.opacity='1';
-    }, 5000);
-    probe.addEventListener('open', () => {
-      clearTimeout(timer); try { probe.close(); } catch {}
-      state.wsUrl = wsUrl; scr.remove(); updateServerAddress();
-      const p = getInitialPlayer();
-      if (p) connectAs(p); else setSetupMessage('Toca tu jugador.');
-    });
-    probe.addEventListener('error', () => {
-      clearTimeout(timer);
-      err.textContent = 'No se pudo conectar. Revisa la IP y la Wi-Fi.';
-      btn.disabled=false; btn.style.opacity='1';
-    });
+      // Tras timeout intentamos conectar igual — puede que el server tarde
+      if (!done) { done = true; btn.disabled=false; btn.style.opacity='1'; advance(); }
+    }, 4500);
+
+    probe.addEventListener('open',  () => { try { probe.close(); } catch {} finish(true); });
+    probe.addEventListener('error', () => finish(false));
   };
 
   qrb.addEventListener('click', () => {
@@ -683,12 +714,85 @@ function startQrCamera() {
   const video = document.getElementById('qrVideo'), canvas = document.getElementById('qrCanvas');
   if (!video || !canvas) return;
   stopQrCamera();
-  navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false })
-    .then((stream) => {
-      state.qrStream = stream; video.srcObject = stream; video.play().catch(()=>{});
-      video.addEventListener('loadedmetadata', () => { canvas.width=video.videoWidth||640; canvas.height=video.videoHeight||640; scheduleQrScan(); }, { once:true });
-    })
-    .catch((err) => setQrResult(`No se pudo acceder a la cámara: ${err.name}`, 'error'));
+
+  // Intentar getUserMedia primero
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      .then((stream) => {
+        state.qrStream = stream; video.srcObject = stream; video.play().catch(() => {});
+        video.addEventListener('loadedmetadata', () => {
+          canvas.width = video.videoWidth || 640; canvas.height = video.videoHeight || 640;
+          scheduleQrScan();
+        }, { once: true });
+      })
+      .catch((err) => {
+        console.warn('getUserMedia failed:', err.name, '— trying file fallback');
+        // NotAllowedError o NotFoundError en Capacitor/Android sin HTTPS
+        // Fallback: input file que abre la cámara nativamente
+        if (err.name === 'NotAllowedError' || err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+          startQrFileFallback();
+        } else {
+          setQrResult(`No se pudo acceder a la cámara: ${err.name}`, 'error');
+        }
+      });
+  } else {
+    startQrFileFallback();
+  }
+}
+
+function startQrFileFallback() {
+  // En Capacitor/Android sin permisos getUserMedia: abrir picker de imagen/cámara
+  const hint = document.getElementById('qrScannerHint');
+  const result = document.getElementById('qrScannerResult');
+  const videoWrap = document.querySelector('.qr-video-wrap');
+
+  if (hint) hint.textContent = 'Toca el botón para abrir la cámara y fotografiar el QR';
+
+  // Ocultar el video y mostrar un botón grande en su lugar
+  if (videoWrap) {
+    videoWrap.innerHTML = `
+      <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;
+                  justify-content:center;gap:16px;background:#0a0c18;border-radius:20px;">
+        <div style="font-size:48px;">📷</div>
+        <label id="qrFileLabel"
+          style="padding:14px 28px;border-radius:999px;border:1px solid rgba(6,182,212,.5);
+                 background:rgba(6,182,212,.15);color:#06b6d4;font-size:14px;
+                 letter-spacing:.06em;cursor:pointer;font-family:'Orbitron',sans-serif;">
+          FOTOGRAFIAR QR
+          <input type="file" id="qrFileInput" accept="image/*" capture="environment"
+                 style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;">
+        </label>
+        <div style="font-size:11px;color:#7c8ba1;text-align:center;padding:0 16px;line-height:1.5;">
+          Se abrirá la cámara.<br>Fotografía el QR del servidor.
+        </div>
+      </div>`;
+
+    const fileInput = document.getElementById('qrFileInput');
+    if (fileInput) {
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0]; if (!file) return;
+        if (result) { result.textContent = 'Procesando imagen…'; result.className = 'qr-scanner-result'; }
+        try {
+          const bitmap = await createImageBitmap(file);
+          const cvs = document.createElement('canvas');
+          cvs.width = bitmap.width; cvs.height = bitmap.height;
+          const ctx = cvs.getContext('2d'); ctx.drawImage(bitmap, 0, 0);
+          const imageData = ctx.getImageData(0, 0, cvs.width, cvs.height);
+          const code = (typeof jsQR !== 'undefined')
+            ? jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' })
+            : null;
+          if (code?.data) {
+            handleQrDetected(code.data);
+          } else {
+            if (result) { result.textContent = 'No se detectó QR. Inténtalo de nuevo.'; result.className = 'qr-scanner-result error'; }
+          }
+        } catch (err) {
+          console.error('QR file decode error:', err);
+          if (result) { result.textContent = 'Error al leer la imagen.'; result.className = 'qr-scanner-result error'; }
+        }
+      });
+    }
+  }
 }
 
 function stopQrCamera() {
