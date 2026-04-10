@@ -178,10 +178,9 @@ button, input, a { font: inherit; }
   z-index: 10;
 }
 
-/* ── Cluster izquierdo: PEDALES ──────────────────────────────────── */
+/* ── Cluster izquierdo: solo la barra de volante + label ─────────── */
 #pedal-cluster {
   position: absolute;
-  /* Anclado al borde izquierdo, centrado verticalmente en la zona de juego */
   left: calc(var(--safe-left) + 12px);
   top: 50%;
   transform: translateY(-50%);
@@ -193,17 +192,16 @@ button, input, a { font: inherit; }
   z-index: 10;
 }
 
-/* ── Cluster derecho: ACCIÓN (truco) ─────────────────────────────── */
+/* ── Cluster derecho: A + B + TRUCO (todo junto) ─────────────────── */
 #action-cluster {
   position: absolute;
-  /* Anclado al borde derecho, centrado verticalmente */
   right: calc(var(--safe-right) + 12px);
   top: 50%;
   transform: translateY(-50%);
 
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-end;
   z-index: 10;
 }
@@ -270,7 +268,7 @@ button, input, a { font: inherit; }
   box-shadow: 0 4px 12px rgba(0,0,0,.5), inset 0 3px 8px rgba(0,0,0,.3);
 }
 
-/* ── Pedales: Acelerar (A) y Frenar (B) ──────────────────────────── */
+/* ── Fila de A + B (dentro del action-cluster, lado derecho) ────────── */
 .pedal-btns {
   display: flex;
   flex-direction: row;
