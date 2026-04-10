@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#06060e">
+  <title>KardPad</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./main.css">
+</head>
+<body>
+
+  <!-- ── PANTALLA DE SELECCIÓN DE JUGADOR ──────────────────────────── -->
+  <div id="setup">
+    <canvas id="bgCanvas"></canvas>
+    <div class="scan-lines"></div>
+    <div class="setup-content">
+      <div class="logo-wrap">
+        <div class="logo-eyebrow">[ MARIO KART WII ]</div>
+        <div class="logo">KARD<span>PAD</span></div>
+        <div class="logo-sub">ESCANEA · ELIGE JUGADOR · CONDUCE</div>
+      </div>
+      <div class="connection-pill" id="connectionHint">Servidor: <span id="serverAddress">--</span></div>
+      <div class="section-label">// TOCA TU JUGADOR</div>
+      <div class="player-cards" role="radiogroup" aria-label="Selección de jugador">
+        <button class="player-card selected" data-player="1" type="button" aria-checked="true">
+          <div class="card-glow"></div><div class="card-num">P1</div><div class="card-text">Rojo</div><div class="card-bar"></div>
+        </button>
+        <button class="player-card" data-player="2" type="button" aria-checked="false">
+          <div class="card-glow"></div><div class="card-num">P2</div><div class="card-text">Azul</div><div class="card-bar"></div>
+        </button>
+        <button class="player-card" data-player="3" type="button" aria-checked="false">
+          <div class="card-glow"></div><div class="card-num">P3</div><div class="card-text">Amarillo</div><div class="card-bar"></div>
+        </button>
+        <button class="player-card" data-player="4" type="button" aria-checked="false">
+          <div class="card-glow"></div><div class="card-num">P4</div><div class="card-text">Verde</div><div class="card-bar"></div>
+        </button>
+      </div>
+      <p class="setup-copy" id="setupCopy">Conecta el móvil y el PC a la misma Wi-Fi.</p>
+      <div class="setup-actions">
+        <button class="qr-scan-btn" id="openQrScannerBtn" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3z"/><path d="M17 14h3"/><path d="M14 17v3"/><path d="M20 17v3"/><path d="M17 20h3"/></svg>
+          Escanear QR del servidor
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MANDO PRINCIPAL ───────────────────────────────────────────── -->
+  <div id="controller" style="display:none">
+
+    <!-- Barra de estado -->
+    <div id="statusBar">
+      <span id="statusText">Desconectado</span>
+      <div class="status-actions">
+        <button class="mini-btn" id="tiltBtn" type="button">Volante OFF</button>
+        <button class="mini-btn" id="tiltCenterBtn" type="button" disabled>Centrar</button>
+        <button class="mini-btn" id="fullscreenBtn" type="button" aria-label="Pantalla completa">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Engranaje configuración -->
+    <button class="settings-gear-btn" id="settingsGearBtn" type="button" aria-label="Configuración">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+
+    <!-- ── ZONA SUPERIOR: triggers (L / R) + inicio ──────────────── -->
+    <div class="drag-unit" id="shoulder-row">
+      <button class="trigger" data-btn="DRIFT" data-side="left"  type="button">DRIFT</button>
+      <button class="start-btn kart-start" data-btn="START" type="button">+</button>
+      <button class="trigger" data-btn="ITEM"  data-side="right" type="button">ITEM</button>
+    </div>
+
+    <!-- ── ZONA IZQUIERDA: acelerador / freno ────────────────────── -->
+    <div class="drag-unit" id="pedal-cluster">
+      <div class="zone-label">PEDALES</div>
+      <div class="pedal-btns">
+        <button class="pedal-btn pedal-accel" data-btn="ACCELERATE" type="button">A</button>
+        <button class="pedal-btn pedal-brake" data-btn="BRAKE"      type="button">B</button>
+      </div>
+      <!-- Barra de inclinación visual -->
+      <div class="tilt-bar-wrap" id="tiltBarWrap">
+        <div class="tilt-label" id="tiltCopy">Activa el Volante para girar.</div>
+        <div class="tilt-bar">
+          <div class="tilt-track">
+            <div class="tilt-indicator" id="tiltIndicator"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ZONA DERECHA: botón de objeto / truco ─────────────────── -->
+    <div class="drag-unit" id="action-cluster">
+      <div class="zone-label zone-label-right">ACCIÓN</div>
+      <div class="action-btns">
+        <button class="action-btn action-shake haptic-btn" id="shakeBtn" type="button">
+          <span class="shake-icon">💥</span>
+          <span class="shake-label">TRUCO</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── ZONA INFERIOR: puntero táctil para menús ──────────────── -->
+    <div class="drag-unit" id="pointer-cluster" style="display:none">
+      <div class="zone-label">PUNTERO MENÚ</div>
+      <div class="pointer-pad" id="pointerPad">
+        <div class="pointer-cross">+</div>
+      </div>
+    </div>
+
+    <!-- Banner modo edición -->
+    <div id="editBanner" class="edit-banner" hidden>
+      <span class="edit-banner-text">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Arrastra los controles
+      </span>
+      <div class="edit-banner-actions">
+        <button class="edit-action-btn" id="editResetBtn" type="button">Reset</button>
+        <button class="edit-action-btn edit-action-btn--done" id="editDoneBtn" type="button">✓ Listo</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── PANEL DE AJUSTES ──────────────────────────────────────────── -->
+  <div class="settings-overlay" id="settingsOverlay" aria-hidden="true">
+    <div class="settings-backdrop" id="settingsBackdrop"></div>
+    <div class="settings-panel" id="settingsPanel" role="dialog" aria-label="Configuración">
+      <div class="settings-header">
+        <div class="settings-title">AJUSTES — KARDPAD</div>
+        <button class="settings-close-btn" id="settingsCloseBtn" type="button">✕</button>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-label">JUGADOR ACTIVO</div>
+        <div class="settings-player-row">
+          <button class="settings-player-btn" data-settings-player="1" type="button">P1</button>
+          <button class="settings-player-btn" data-settings-player="2" type="button">P2</button>
+          <button class="settings-player-btn" data-settings-player="3" type="button">P3</button>
+          <button class="settings-player-btn" data-settings-player="4" type="button">P4</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Vibración</div>
+            <div class="settings-row-hint">Al pulsar A, B y truco</div>
+          </div>
+          <button class="toggle-btn" id="vibrationToggle" type="button" role="switch" aria-checked="true">
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Puntero de menú</div>
+            <div class="settings-row-hint">Toca la pantalla para mover el cursor</div>
+          </div>
+          <button class="toggle-btn" id="pointerToggle" type="button" role="switch" aria-checked="false">
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-row settings-row--column">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Sensibilidad del volante</div>
+            <div class="settings-row-hint" id="tiltSensLabel">Zona muerta: media</div>
+          </div>
+          <div class="slider-wrap">
+            <span class="slider-label">Suave</span>
+            <input type="range" id="tiltSensSlider" class="settings-slider" min="1" max="5" step="1" value="3">
+            <span class="slider-label">Preciso</span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-label">ACCIONES</div>
+        <div class="settings-actions-grid">
+          <button class="settings-action-btn" id="rescanQrBtn" type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3z"/></svg>
+            Re-escanear QR
+          </button>
+          <button class="settings-action-btn settings-action-btn--danger" id="reconnectBtn" type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Reconectar
+          </button>
+          <button class="settings-action-btn settings-action-btn--neutral" id="changePlayerBtn" type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Cambiar jugador
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── QR SCANNER ────────────────────────────────────────────────── -->
+  <div class="qr-scanner-modal" id="qrScannerModal" aria-hidden="true">
+    <div class="qr-scanner-inner">
+      <div class="qr-scanner-header">
+        <div class="qr-scanner-title">ESCANEAR QR DEL SERVIDOR</div>
+        <button class="qr-scanner-close" id="qrScannerClose" type="button">✕</button>
+      </div>
+      <div class="qr-video-wrap">
+        <video id="qrVideo" autoplay playsinline muted></video>
+        <canvas id="qrCanvas" class="qr-canvas"></canvas>
+        <div class="qr-frame">
+          <div class="qr-corner qr-corner--tl"></div><div class="qr-corner qr-corner--tr"></div>
+          <div class="qr-corner qr-corner--bl"></div><div class="qr-corner qr-corner--br"></div>
+          <div class="qr-scan-line"></div>
+        </div>
+      </div>
+      <div class="qr-scanner-hint" id="qrScannerHint">Apunta al QR que muestra la terminal del servidor</div>
+      <div class="qr-scanner-result" id="qrScannerResult"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+  <script src="./app.js"></script>
+
+  <!-- Fondo animado -->
+  <script>
+    (function() {
+      const canvas = document.getElementById('bgCanvas'); if (!canvas) return;
+      const ctx = canvas.getContext('2d'); let width = 0, height = 0;
+      // Colores Mario Kart: rojo, amarillo, azul, verde, naranja
+      const HUES = [0, 45, 210, 140, 270];
+      const dots = Array.from({length:55},()=>({
+        x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight,
+        vx: (Math.random()-.5)*.5, vy: (Math.random()-.5)*.5,
+        r: Math.random()*1.6+.4, hue: HUES[Math.floor(Math.random()*HUES.length)],
+        a: Math.random()*.3+.08
+      }));
+      function resize(){width=canvas.width=window.innerWidth;height=canvas.height=window.innerHeight;}
+      function draw(){
+        ctx.clearRect(0,0,width,height);
+        ctx.strokeStyle='rgba(255,255,255,0.02)'; ctx.lineWidth=1;
+        for(let x=0;x<width;x+=56){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,height);ctx.stroke();}
+        for(let y=0;y<height;y+=56){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(width,y);ctx.stroke();}
+        dots.forEach(d=>{
+          d.x+=d.vx; d.y+=d.vy;
+          if(d.x<0||d.x>width)d.vx*=-1; if(d.y<0||d.y>height)d.vy*=-1;
+          ctx.beginPath(); ctx.arc(d.x,d.y,d.r,0,Math.PI*2);
+          ctx.fillStyle=`hsla(${d.hue},85%,60%,${d.a})`; ctx.fill();
+        });
+        requestAnimationFrame(draw);
+      }
+      resize(); window.addEventListener('resize',resize); draw();
+    })();
+  </script>
+</body>
+</html>
