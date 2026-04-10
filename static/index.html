@@ -78,13 +78,9 @@
       <button class="trigger" data-btn="ITEM"  data-side="right" type="button">ITEM</button>
     </div>
 
-    <!-- ── ZONA IZQUIERDA: acelerador / freno ────────────────────── -->
+    <!-- ── ZONA IZQUIERDA: solo barra de volante ─────────────────── -->
     <div class="drag-unit" id="pedal-cluster">
-      <div class="zone-label">PEDALES</div>
-      <div class="pedal-btns">
-        <button class="pedal-btn pedal-accel" data-btn="ACCELERATE" type="button">A</button>
-        <button class="pedal-btn pedal-brake" data-btn="BRAKE"      type="button">B</button>
-      </div>
+      <div class="zone-label">VOLANTE</div>
       <!-- Barra de inclinación visual -->
       <div class="tilt-bar-wrap" id="tiltBarWrap">
         <div class="tilt-label" id="tiltCopy">Activa el Volante para girar.</div>
@@ -96,10 +92,16 @@
       </div>
     </div>
 
-    <!-- ── ZONA DERECHA: botón de objeto / truco ─────────────────── -->
+    <!-- ── ZONA DERECHA: A + B + TRUCO ───────────────────────────── -->
     <div class="drag-unit" id="action-cluster">
       <div class="zone-label zone-label-right">ACCIÓN</div>
       <div class="action-btns">
+        <!-- Fila: B (freno) + A (acelerador) — B más pequeño a la izquierda -->
+        <div class="pedal-btns">
+          <button class="pedal-btn pedal-brake"  data-btn="BRAKE"      type="button">B</button>
+          <button class="pedal-btn pedal-accel"  data-btn="ACCELERATE" type="button">A</button>
+        </div>
+        <!-- Botón de truco debajo -->
         <button class="action-btn action-shake haptic-btn" id="shakeBtn" type="button">
           <span class="shake-icon">💥</span>
           <span class="shake-label">TRUCO</span>
@@ -150,7 +152,7 @@
         <div class="settings-row">
           <div class="settings-row-info">
             <div class="settings-row-label">Vibración</div>
-            <div class="settings-row-hint">Al pulsar A, B y truco</div>
+            <div class="settings-row-hint">Al pulsar A, B y al girar el volante</div>
           </div>
           <button class="toggle-btn" id="vibrationToggle" type="button" role="switch" aria-checked="true">
             <span class="toggle-knob"></span>
@@ -230,7 +232,6 @@
     (function() {
       const canvas = document.getElementById('bgCanvas'); if (!canvas) return;
       const ctx = canvas.getContext('2d'); let width = 0, height = 0;
-      // Colores Mario Kart: rojo, amarillo, azul, verde, naranja
       const HUES = [0, 45, 210, 140, 270];
       const dots = Array.from({length:55},()=>({
         x: Math.random()*window.innerWidth, y: Math.random()*window.innerHeight,
