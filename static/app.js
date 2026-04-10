@@ -475,33 +475,40 @@ function handleDeviceMotion(ev) {
   }
 }
 
-/* ─── Haptic de dirección al inclinar ───────────────────────────── */
+/* ─── Haptic continuo mientras giras el volante ─────────────────── */
+// Estrategia: pulsos periódicos cuya FRECUENCIA y DURACIÓN aumentan
+// proporcionalmente al ángulo de giro. A más inclinación, más vibración.
 function triggerTiltHaptic(value, threshold) {
   const now = Date.now();
-  // Throttle: mínimo 300ms entre haptics de tilt
-  if (now - state.tiltHapticTs < 300) return;
+  const absVal = Math.abs(value);
 
-  let side;
-  if (value > threshold)  side = 'right';
-  else if (value < -threshold) side = 'left';
-  else side = 'center';
-
-  // Solo vibrar al ENTRAR en una zona nueva (no spam continuo)
-  if (side !== 'center' && side !== state.tiltLastHapticSide) {
-    state.tiltHapticTs      = now;
-    state.tiltLastHapticSide = side;
-    // Patrón diferente: derecha = pulso corto, izquierda = dos pulsos
-    if (side === 'right') {
-      triggerHaptic(25);
-    } else {
-      triggerHaptic(20);
-      setTimeout(() => triggerHaptic(20), 60);
+  // Sin giro suficiente → resetear lado y salir
+  if (absVal <= threshold) {
+    if (state.tiltLastHapticSide !== 'center') {
+      state.tiltLastHapticSide = 'center';
+      // Pulso suave al volver al centro
+      triggerHaptic(10);
     }
-  } else if (side === 'center' && state.tiltLastHapticSide !== 'center') {
-    // Pequeño pulso al volver al centro
-    state.tiltLastHapticSide = 'center';
-    triggerHaptic(12);
+    return;
   }
+
+  const side = value > 0 ? 'right' : 'left';
+
+  // Cuánto más allá del threshold estamos (0 = justo en el límite, 1 = máximo)
+  // Usamos (absVal - threshold) / (1 - threshold) para normalizar
+  const intensity = clamp((absVal - threshold) / (1 - threshold), 0, 1);
+
+  // Intervalo entre pulsos: va de 180ms (giro suave) a 60ms (giro máximo)
+  const interval = Math.round(180 - intensity * 120);
+
+  // Duración del pulso: va de 12ms a 30ms según intensidad
+  const duration = Math.round(12 + intensity * 18);
+
+  if (now - state.tiltHapticTs < interval) return;
+
+  state.tiltHapticTs       = now;
+  state.tiltLastHapticSide = side;
+  triggerHaptic(duration);
 }
 
 /* ─── Barra visual de inclinación ────────────────────────────────── */
