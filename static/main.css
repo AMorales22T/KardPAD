@@ -1,6 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════
-   KardPad — main.css  v1.0
-   Basado en SmashPad v2.2 — adaptado para el layout de Mario Kart
+   KardPad — main.css  v1.1  (layout fix)
    ══════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -97,7 +96,7 @@ button, input, a { font: inherit; }
 .qr-scan-btn:active { background: rgba(6,182,212,.22); transform: scale(.96); }
 
 /* ═══════════════════════════════════════════════════════════════════
-   CONTROLLER
+   CONTROLLER — contenedor principal
    ═══════════════════════════════════════════════════════════════════ */
 #controller {
   position: fixed; inset: 0;
@@ -123,6 +122,7 @@ button, input, a { font: inherit; }
 #statusText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
 .status-actions { display: flex; flex-wrap: nowrap; gap: 6px; flex-shrink: 0; }
 
+/* En portrait ocultamos los botones del status bar para no saturar */
 @media (orientation: portrait) { .status-actions { display: none; } }
 
 .mini-btn {
@@ -142,10 +142,11 @@ button, input, a { font: inherit; }
 /* ─── Settings gear ──────────────────────────────────────────────── */
 .settings-gear-btn {
   position: absolute;
+  /* En landscape: esquina inferior derecha pero SIN chocar con el cluster de acción */
   right:  calc(var(--safe-right)  + 14px);
   bottom: calc(var(--safe-bottom) + 14px);
   z-index: 40;
-  width: 50px; height: 50px; border-radius: 50%;
+  width: 44px; height: 44px; border-radius: 50%;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(10,12,24,.88); backdrop-filter: blur(10px);
   color: rgba(255,255,255,.7);
@@ -157,44 +158,67 @@ button, input, a { font: inherit; }
 .settings-gear-btn:active { transform: rotate(30deg) scale(.92); color: var(--player-color); }
 
 /* ═══════════════════════════════════════════════════════════════════
-   DRAG UNITS — posición absoluta libre
+   LAYOUT DEL CONTROLADOR
+   — Usamos posición absoluta con márgenes safe-area explícitos
+   — Los clusters NO usan transform: translate(-50%,-50%) para evitar
+     que se corten en los bordes.
    ═══════════════════════════════════════════════════════════════════ */
-.drag-unit {
-  position: absolute;
-  touch-action: none;
-  transform-origin: center center;
-}
 
-/* ── Fila de hombros: triggers + start ────────────────────────────── */
+/* ── Fila de hombros (parte superior) ───────────────────────────── */
 #shoulder-row {
+  position: absolute;
+  top: calc(var(--safe-top) + 52px);   /* debajo del status bar */
+  left:  calc(var(--safe-left)  + 12px);
+  right: calc(var(--safe-right) + 12px);
+
   display: grid;
-  grid-template-columns: minmax(0,1fr) 68px minmax(0,1fr);
+  grid-template-columns: 1fr 60px 1fr;
   gap: 10px;
-  /* Posición por defecto: top, ancho casi completo */
-  left: 50%;
-  top: 8%;
-  transform: translateX(-50%) translateY(-50%);
-  width: calc(100% - var(--safe-left) - var(--safe-right) - 28px);
+  /* Sin transform: la fila ocupa todo el ancho disponible */
+  z-index: 10;
 }
 
-/* ── Pedales (izquierda) ──────────────────────────────────────────── */
+/* ── Cluster izquierdo: PEDALES ──────────────────────────────────── */
 #pedal-cluster {
-  display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
-  left: 10%; top: 55%;
-  transform: translate(-50%,-50%);
+  position: absolute;
+  /* Anclado al borde izquierdo, centrado verticalmente en la zona de juego */
+  left: calc(var(--safe-left) + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  z-index: 10;
 }
 
-/* ── Acción truco (derecha) ───────────────────────────────────────── */
+/* ── Cluster derecho: ACCIÓN (truco) ─────────────────────────────── */
 #action-cluster {
-  display: flex; flex-direction: column; gap: 6px; align-items: flex-end;
-  right: 6%; top: 55%;
+  position: absolute;
+  /* Anclado al borde derecho, centrado verticalmente */
+  right: calc(var(--safe-right) + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+  z-index: 10;
 }
 
-/* ── Puntero de menú (centro inferior, oculto por defecto) ─────────── */
+/* ── Puntero de menú (centro inferior) ──────────────────────────── */
 #pointer-cluster {
-  display: none; flex-direction: column; gap: 8px; align-items: center;
-  left: 50%; bottom: 60px;
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 60px);
   transform: translateX(-50%);
+  display: none;           /* oculto por defecto, se activa en settings */
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  z-index: 10;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -205,33 +229,36 @@ button, input, a { font: inherit; }
   -webkit-touch-callout: none; cursor: pointer;
 }
 .trigger, .pedal-btn, .action-btn, .start-btn { position: relative; }
+
+/* Zona táctil ampliada — importante para no fallar el toque */
 .trigger::before, .pedal-btn::before, .action-btn::before {
-  content: ''; position: absolute; inset: -12px;
+  content: ''; position: absolute; inset: -10px;
   border-radius: inherit; pointer-events: auto;
 }
 
 /* ── Triggers (DRIFT / ITEM) ──────────────────────────────────────── */
 .trigger {
-  min-height: 56px; border-radius: 16px 16px 22px 22px;
+  width: 100%;
+  min-height: 60px; border-radius: 16px 16px 22px 22px;
   background: linear-gradient(180deg, #282b3d, #161826); color: #f8fafc;
   border: 1px solid rgba(255,255,255,.12); box-shadow: 0 8px 20px rgba(0,0,0,.34);
-  font-family: 'Orbitron', sans-serif; font-size: 16px; letter-spacing: .06em;
+  font-family: 'Orbitron', sans-serif; font-size: 17px; letter-spacing: .06em;
   transition: transform .09s, filter .09s, box-shadow .09s; will-change: transform;
 }
 .trigger[data-side="left"]  { border-top-left-radius:  6px; }
 .trigger[data-side="right"] { border-top-right-radius: 6px; }
 .trigger:active, .trigger.pressed {
   transform: translateY(4px) scale(.972);
-  filter: brightness(1.18) saturate(1.1);
+  filter: brightness(1.22) saturate(1.1);
   box-shadow: 0 2px 6px rgba(0,0,0,.5), inset 0 3px 8px rgba(0,0,0,.4);
 }
 
 /* ── Botón START (pequeño, centro) ───────────────────────────────── */
 .kart-start {
-  width: 64px; height: 64px; border-radius: 50%;
+  width: 60px; height: 60px; border-radius: 50%;
   background: linear-gradient(180deg, #1a1d2c, #0d101a);
   border: 2px solid rgba(255,255,255,.14); color: #fff;
-  font-family: 'Orbitron', sans-serif; font-size: 22px; letter-spacing: .02em;
+  font-family: 'Orbitron', sans-serif; font-size: 24px; letter-spacing: .02em;
   box-shadow: 0 14px 30px rgba(0,0,0,.44), inset 0 0 0 1px rgba(255,255,255,.04);
   display: flex; align-items: center; justify-content: center;
   align-self: center;
@@ -245,15 +272,25 @@ button, input, a { font: inherit; }
 
 /* ── Pedales: Acelerar (A) y Frenar (B) ──────────────────────────── */
 .pedal-btns {
-  display: flex; flex-direction: row; gap: 12px;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  align-items: center;
 }
+
+/* Tamaños de los botones: usamos vmin para que funcionen bien tanto en
+   portrait como en landscape sin salirse de la pantalla */
 .pedal-btn {
-  width: min(26vw, 120px); height: min(26vw, 120px);
+  width:  clamp(80px, 22vmin, 120px);
+  height: clamp(80px, 22vmin, 120px);
   border-radius: 50%;
-  font-family: 'Orbitron', sans-serif; font-size: clamp(24px,6vw,40px); font-weight: 900;
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(22px, 6vmin, 40px);
+  font-weight: 900;
   box-shadow: 0 10px 24px rgba(0,0,0,.4), inset 0 2px 6px rgba(255,255,255,.2);
   transition: transform .08s, filter .08s, box-shadow .08s; will-change: transform;
   display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
 }
 .pedal-btn:active, .pedal-btn.pressed {
   transform: translateY(4px) scale(.953);
@@ -268,23 +305,20 @@ button, input, a { font: inherit; }
 .pedal-brake {
   background: radial-gradient(circle at 35% 30%, #ff5f4a, #b02a1e 80%);
   color: #5f120f;
-  width: min(20vw, 90px); height: min(20vw, 90px);
-  font-size: clamp(18px,4.5vw,28px);
+  width:  clamp(60px, 17vmin, 90px);
+  height: clamp(60px, 17vmin, 90px);
+  font-size: clamp(16px, 4.5vmin, 28px);
   text-shadow: 0 2px 4px rgba(0,0,0,.3);
-  align-self: center;
-}
-
-@media (orientation: landscape) {
-  .pedal-btn { width: min(22vh, 110px); height: min(22vh, 110px); }
-  .pedal-brake { width: min(18vh, 84px); height: min(18vh, 84px); }
 }
 
 /* ── Barra de inclinación (volante) ──────────────────────────────── */
 .tilt-bar-wrap {
   display: flex; flex-direction: column; gap: 6px;
-  width: min(52vw, 260px);
+  /* Anchura adaptable: ocupa el espacio entre los dos clusters */
+  width: clamp(140px, 38vw, 240px);
+  max-width: 100%;
 }
-.tilt-label { font-size: 11px; color: var(--text-mid); line-height: 1.4; max-width: 200px; }
+.tilt-label { font-size: 11px; color: var(--text-mid); line-height: 1.4; }
 .tilt-bar { position: relative; height: 8px; background: rgba(255,255,255,.1); border-radius: 999px; overflow: visible; }
 .tilt-track { position: relative; width: 100%; height: 100%; }
 .tilt-indicator {
@@ -295,10 +329,6 @@ button, input, a { font: inherit; }
   transition: left .06s linear, background .1s;
   margin-left: -9px;
   left: 50%;
-}
-
-@media (orientation: landscape) {
-  .tilt-bar-wrap { width: min(36vh, 220px); }
 }
 
 /* ── Botón de truco / shake ──────────────────────────────────────── */
@@ -319,20 +349,18 @@ button, input, a { font: inherit; }
   box-shadow: 0 2px 6px rgba(0,0,0,.6), inset 0 4px 10px rgba(0,0,0,.45);
 }
 .action-shake {
-  width: min(22vw, 110px); height: min(22vw, 110px); border-radius: 50%;
+  width:  clamp(80px, 22vmin, 110px);
+  height: clamp(80px, 22vmin, 110px);
+  border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #f5a623, #c97900 80%);
   color: #5a3500;
   box-shadow: 0 10px 24px rgba(200,120,0,.3), inset 0 2px 6px rgba(255,255,255,.2);
 }
-.shake-icon  { font-size: clamp(22px,5vw,32px); line-height: 1; }
+.shake-icon  { font-size: clamp(20px, 5vmin, 32px); line-height: 1; }
 .shake-label { font-size: 10px; letter-spacing: .06em; font-family: 'Orbitron', sans-serif; }
 
 @keyframes shake-flash { 0%,100%{box-shadow:0 10px 24px rgba(200,120,0,.3)} 50%{box-shadow:0 0 0 8px rgba(245,166,35,.5), 0 10px 24px rgba(200,120,0,.5)} }
 .action-shake.shake-flash { animation: shake-flash .18s ease; }
-
-@media (orientation: landscape) {
-  .action-shake { width: min(18vh, 100px); height: min(18vh, 100px); }
-}
 
 /* ── Zona de etiquetas ────────────────────────────────────────────── */
 .zone-label { color: rgba(255,255,255,.5); font-size: 11px; letter-spacing: .1em; }
