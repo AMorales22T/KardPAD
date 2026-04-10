@@ -66,12 +66,115 @@ document.addEventListener('DOMContentLoaded', () => {
   applyPlayerTheme(1);
   initSettingsPanel();
 
-  state.wsUrl = buildWsUrl();
-  updateServerAddress();
-  const p = getInitialPlayer();
-  if (p) connectAs(p);
-  else setSetupMessage('Toca tu jugador para conectarte.');
+  if (isCapacitor()) {
+    injectIpScreen();
+  } else {
+    state.wsUrl = buildWsUrl();
+    updateServerAddress();
+    const p = getInitialPlayer();
+    if (p) connectAs(p);
+    else setSetupMessage('Toca tu jugador para conectarte.');
+  }
 });
+function isCapacitor() {
+  return (
+    window.Capacitor !== undefined ||
+    window.location.protocol === 'capacitor:' ||
+    (window.location.protocol === 'http:' && window.location.hostname === 'localhost')
+  );
+}
+
+function injectIpScreen() {
+  const saved = lsGet('kardpad_ip') || '';
+  const scr = document.createElement('div');
+  scr.id = 'ipScreen';
+  scr.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(6,6,14,.97);font-family:'Share Tech Mono',monospace";
+  scr.innerHTML = `
+    <div style="width:min(90%,380px);padding:28px 24px;border:1px solid rgba(255,255,255,.1);
+                border-radius:22px;background:rgba(10,12,22,.9);display:grid;gap:16px;text-align:center;">
+      <div style="font-family:'Orbitron',sans-serif;font-size:22px;color:#fff;letter-spacing:.06em;">
+        KARD<span style="color:#e74c3c;">PAD</span>
+      </div>
+      <div style="font-size:11px;color:#7c8ba1;letter-spacing:.1em;">INTRODUCE LA IP DE TU PC</div>
+      <input id="ipInput" type="text" inputmode="decimal" placeholder="192.168.1.X" value="${saved}"
+        style="padding:14px 16px;border-radius:12px;border:1px solid rgba(6,182,212,.35);
+               background:rgba(6,182,212,.07);color:#d7fbff;font-size:18px;
+               font-family:'Share Tech Mono',monospace;text-align:center;
+               outline:none;width:100%;-webkit-appearance:none;"/>
+      <p style="font-size:11px;color:#7c8ba1;line-height:1.6;margin:0;">
+        Ejecuta <code style="color:#06b6d4;">python server.py</code> en el PC.
+      </p>
+      <button id="ipConnectBtn" type="button"
+        style="padding:15px;border-radius:999px;border:none;cursor:pointer;
+               background:linear-gradient(180deg,#e74c3c,#c0392b);color:#fff;
+               font-family:'Orbitron',sans-serif;font-size:14px;letter-spacing:.08em;
+               -webkit-appearance:none;">
+        CONECTAR
+      </button>
+      <button id="ipQrBtn" type="button"
+        style="padding:12px;border-radius:999px;border:1px solid rgba(6,182,212,.4);
+               background:rgba(6,182,212,.1);color:#06b6d4;font-size:13px;
+               letter-spacing:.06em;cursor:pointer;-webkit-appearance:none;">
+        📷 Escanear QR
+      </button>
+      <div id="ipError" style="font-size:12px;color:#e74c3c;min-height:18px;line-height:1.4;"></div>
+    </div>`;
+  document.body.appendChild(scr);
+
+  const inp = document.getElementById('ipInput');
+  const btn = document.getElementById('ipConnectBtn');
+  const qrb = document.getElementById('ipQrBtn');
+  const err = document.getElementById('ipError');
+
+  const attempt = () => {
+    const raw = inp.value.trim();
+    if (!raw) { err.textContent = 'Escribe la IP del PC.'; return; }
+    const ip = raw.replace(/^wss?:\/\//,'').replace(/^https?:\/\//,'').split(':')[0].split('/')[0];
+    if (!ip) { err.textContent = 'IP no válida.'; return; }
+    lsSet('kardpad_ip', ip);
+    const wsUrl = `ws://${ip}:8000`;
+    err.textContent = 'Probando conexión…';
+    btn.disabled = true; btn.style.opacity = '0.6';
+    let probe;
+    try { probe = new WebSocket(wsUrl); }
+    catch { err.textContent = 'URL no válida.'; btn.disabled=false; btn.style.opacity='1'; return; }
+    const timer = setTimeout(() => {
+      try { probe.close(); } catch {}
+      err.textContent = '¿Está corriendo server.py?';
+      btn.disabled=false; btn.style.opacity='1';
+    }, 5000);
+    probe.addEventListener('open', () => {
+      clearTimeout(timer); try { probe.close(); } catch {}
+      state.wsUrl = wsUrl; scr.remove(); updateServerAddress();
+      const p = getInitialPlayer();
+      if (p) connectAs(p); else setSetupMessage('Toca tu jugador.');
+    });
+    probe.addEventListener('error', () => {
+      clearTimeout(timer);
+      err.textContent = 'No se pudo conectar. Revisa la IP y la Wi-Fi.';
+      btn.disabled=false; btn.style.opacity='1';
+    });
+  };
+
+  // Botón QR abre el scanner directamente desde esta pantalla
+  qrb.addEventListener('click', () => {
+    scr.style.display = 'none';
+    openQrScanner();
+    // Cuando el QR detecte la IP, ya llama a connectAs() solo
+    // Si cierran el scanner sin escanear, volvemos a mostrar esta pantalla
+    const origClose = closeQrScanner.bind({});
+    window._qrCloseOverride = () => {
+      origClose();
+      if (!state.wsUrl || state.wsUrl.includes('localhost')) {
+        scr.style.display = 'flex';
+      }
+    };
+  });
+
+  btn.addEventListener('click', attempt);
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') attempt(); });
+  if (saved) setTimeout(attempt, 300);
+}
 
 /* ─── URL del WebSocket ──────────────────────────────────────────── */
 function buildWsUrl(hostOverride) {
